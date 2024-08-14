@@ -10,6 +10,8 @@ https://www.synacktiv.com/publications/sccmsecretspy-exploiting-sccm-policies-di
 You can install SCCMSecrets.py by cloning the repository and installing the dependencies.
 ```
 $ git clone https://github.com/synacktiv/SCCMSecrets
+$ cd SCCMSecrets
+$ python3 -m venv .venv && source .venv/bin/activate
 $ python3 -m pip install -r requirements.txt
 ```
 
