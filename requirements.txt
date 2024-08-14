@@ -1,0 +1,7 @@
+requests
+typer[all]
+bs4
+cryptography
+requests_ntlm
+requests_toolbelt
+pyasn1_modules
