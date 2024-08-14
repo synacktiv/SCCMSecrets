@@ -1,5 +1,12 @@
 from enum import Enum
 
+DP_DOWNLOAD_HEADERS = {
+    "User-Agent": "SMS CCM 5.0 TS"
+}
+MP_INTERACTIONS_HEADERS = {
+    "User-Agent": "ConfigMgr Messaging HTTP Sender"
+}
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -13,8 +20,8 @@ class bcolors:
 
 DATE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-BRUTEFORCE_THREADS = 10
-DOWNLOAD_THREADS = 3
+BRUTEFORCE_THREADS = 5
+DOWNLOAD_THREADS = 2
 
 OID_MAPPING = {
     '1.2.840.113549.3.7': "des-ede3-cbc",
