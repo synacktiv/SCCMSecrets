@@ -103,6 +103,8 @@ def clientRegistration(management_point, username, password, machineAccountProvi
 
     with open(f"loot/{directory_name}/device/guid.txt", 'w') as f:
         f.write(f"{client_guid}\n")
+    with open(f"loot/{directory_name}/device/client_name.txt", 'w') as f:
+        f.write(f"{client_name}\n")
 
     logger.warning(f"{bcolors.OKGREEN}[+] Client registration complete - GUID: {client_guid}.{bcolors.ENDC}")
     return private_key, client_guid
