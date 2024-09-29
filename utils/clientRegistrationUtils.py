@@ -14,7 +14,7 @@ from utils.miscUtils                    import encodeUTF16StripBOM
 from requests_ntlm                      import HttpNtlmAuth
 from requests_toolbelt.multipart        import decoder
 
-from conf                               import bcolors, DATE_FORMAT
+from conf                               import bcolors, DATE_FORMAT, SCCMPoliciesDumpError
 
 logger = logging.getLogger(__name__)
 
@@ -84,20 +84,22 @@ def clientRegistration(management_point, username, password, machineAccountProvi
     # Perform registration    
     logger.warning(f"{bcolors.OKCYAN}\n[*] Registering SCCM client with FQDN {client_name}{bcolors.ENDC}")
     registration_request_payload = generateRegistrationRequestPayload(management_point, public_key, private_key, client_name)
-    if machineAccountProvided:
-        logger.warning(f"[*] Using authenticated registration, with username {username} and password {password}")
-        register_response = registerClient(management_point, registration_request_payload, username, password)
-    else:
-        register_response = registerClient(management_point, registration_request_payload, None, None)
-        
+
+    try:
+        if machineAccountProvided:
+            logger.warning(f"[*] Using authenticated registration, with username {username} and password {password}")
+            register_response = registerClient(management_point, registration_request_payload, username, password)
+        else:
+            register_response = registerClient(management_point, registration_request_payload, None, None)
+    except Exception as e:
+        raise SCCMPoliciesDumpError(f"Client registration failed. If you provided machine account credentials, are you sure they are correct ?").with_traceback(e.__traceback__)
+
     # Parse registration response
     try:
         root = ET.fromstring(register_response[:-1])
         client_guid = root.attrib["SMSID"].split("GUID:")[1]
     except:
-        traceback.print_exc()
-        logger.error(f"{bcolors.FAIL}[-] Could not retrieve client GUID after registration. Exiting.{bcolors.ENDC}")
-        return False
+        raise SCCMPoliciesDumpError(f"Could not retrieve client GUID after registration").with_traceback(e.__traceback__)
 
     with open(f"loot/{directory_name}/device/guid.txt", 'w') as f:
         f.write(f"{client_guid}\n")

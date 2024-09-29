@@ -54,8 +54,25 @@ class ANONYMOUSDP(Enum):
     DISABLED = 1
     UNKNOWN = 2
 
+class DOWNLOADMETHOD(str, Enum):
+    datalib = "datalib"
+    bruteforce = "bruteforce"
+
+
 class SCENARIOS(Enum):
     NoCredsNoAnonymous = 0
     NoCredsAnonymous = 1
     UserCreds = 2
     MachineCreds = 3
+
+
+
+### Exceptions
+
+class SCCMPoliciesDumpError(Exception):
+    "Custom exception triggered when encountering an error during SCCM policies dump"
+    pass
+
+class SCCMDPFileDumpError(Exception):
+    "Custom exception triggered when encountering an error during DP file dump"
+    pass

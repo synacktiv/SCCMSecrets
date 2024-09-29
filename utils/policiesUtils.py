@@ -22,7 +22,7 @@ from cryptography.hazmat.backends                   import default_backend
 from utils.deobfuscateSecretPolicyBlob              import deobfuscateSecretPolicyBlob
 
 
-from conf                                           import DATE_FORMAT, OID_MAPPING, bcolors
+from conf                                           import DATE_FORMAT, OID_MAPPING, bcolors, SCCMPoliciesDumpError
 
 logger = logging.getLogger(__name__)
 
@@ -174,8 +174,11 @@ def parsePoliciesFlags(policyFlagValue):
 
 def policiesRequest(management_point, private_key, client_guid, client_name, directory_name):
     logger.warning(f"{bcolors.OKCYAN}\n[*] Requesting device policies {client_name}{bcolors.ENDC}")
-    policies_request_payload = generatePoliciesRequestPayload(management_point, private_key, client_guid, client_name)
-    policies_response = requestPolicies(management_point, policies_request_payload)
+    try:
+        policies_request_payload = generatePoliciesRequestPayload(management_point, private_key, client_guid, client_name)
+        policies_response = requestPolicies(management_point, policies_request_payload)
+    except Exception as e:
+        raise SCCMPoliciesDumpError(f"Policies retrieval failed. If you provided an existing device, are you sure its GUID and private key are correct ?").with_traceback(e.__traceback__)
     
     root = ET.fromstring(policies_response[:-1])
     policies = root.findall(".//Policy")
