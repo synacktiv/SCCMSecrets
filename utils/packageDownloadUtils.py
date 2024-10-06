@@ -70,7 +70,7 @@ def recursivePackageDirectoryFetch(object, directory, authenticated_session=None
     if authenticated_session is None:
         r = requests.get(directory, headers=DP_DOWNLOAD_HEADERS)
     else:
-        r = authenticated_session.get(directory)
+        r = authenticated_session.get(directory, headers=DP_DOWNLOAD_HEADERS)
     soup = BeautifulSoup(r.content, 'html.parser')
     files = []
     for href in soup.find_all('a'):
