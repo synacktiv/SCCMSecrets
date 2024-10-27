@@ -1,12 +1,12 @@
 from cryptography                                       import x509
 from cryptography.x509.oid                              import NameOID
 from cryptography.x509                                  import ObjectIdentifier
-from cryptography.hazmat.primitives                     import serialization, hashes
+from cryptography.hazmat.primitives                     import hashes
 from cryptography.hazmat.primitives.asymmetric          import rsa
 from cryptography.hazmat.primitives.asymmetric.padding  import PKCS1v15
 from datetime                                           import datetime, timedelta
 
-def createCertificate(privatekey):
+def create_certificate(privatekey):
     subject = issuer = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, "ConfigMgr Client"),
     ])
@@ -34,17 +34,17 @@ def createCertificate(privatekey):
 
     return cert
 
-def createPrivateKey():
+def create_private_key():
     privatekey = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     return privatekey
 
-def SCCMSign(private_key, data):
+def SCCM_sign(private_key, data):
         signature = private_key.sign(data, PKCS1v15(), hashes.SHA256())
         signature_rev = bytearray(signature)
         signature_rev.reverse()
         return bytes(signature_rev)
     
-def buildMSPublicKeyBlob(private_key):
+def build_MS_public_key_blob(private_key):
     blobHeader = b"\x06\x02\x00\x00\x00\xA4\x00\x00\x52\x53\x41\x31\x00\x08\x00\x00\x01\x00\x01\x00"
     blob = blobHeader + private_key.public_key().public_numbers().n.to_bytes(int(private_key.key_size / 8), byteorder="little")
     return blob.hex().upper()

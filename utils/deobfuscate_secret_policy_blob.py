@@ -1,5 +1,5 @@
 # Taken from sccmwtf https://github.com/xpn/sccmwtf
-# Credits @xpn :)
+# Credits @xpn
 
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
@@ -33,7 +33,7 @@ def mscrypt_derive_key_sha1(secret:bytes):
     derived_key = hash1 + hash2[:4]
     return derived_key
 
-def deobfuscateSecretPolicyBlob(output):
+def deobfuscate_secret_policy_blob(output):
     if isinstance(output, str):
         output = bytes.fromhex(output)
     
