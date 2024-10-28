@@ -30,7 +30,7 @@ def print_banner():
 
 @app.command(help="Dump secret policies from an SCCM Management Point")
 def policies(
-    management_point: Annotated[str, typer.Option("--management-point", "-mp", help="The client's SCCM management point. Only necessary if the management point is not on the same machine as the distribution point")],
+    management_point: Annotated[str, typer.Option("--management-point", "-mp", help="The client's SCCM management point.")],
     client_name: Annotated[str, typer.Option("--client-name", "-cn", help="[Optional] The name of the client that will be created in SCCM - or a random name if using an existing device")],
     machine_name: Annotated[str, typer.Option("--machine-name", "-u", help="[Optional] A machine account name. If not provided, SCCMSecrets will try to exploit automatic device approval")] = None,
     machine_pass: Annotated[str, typer.Option("--machine-pass", "-p", help="[Optional] The password for the machine account")] = None,
