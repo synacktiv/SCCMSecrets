@@ -131,7 +131,7 @@ class FileDumper():
     def download_target_files(self):
         if self.urls is not None:
             with open(self.urls, 'r') as f:
-                contents = f.readlines()
+                contents = f.read().splitlines()
             package_ids = set()
             to_download = []
             for file in contents:
