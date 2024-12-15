@@ -12,7 +12,7 @@ from conf                               import bcolors, ANONYMOUSDP, SCCMDPFileD
 
 logger = logging.getLogger(__name__)
 
-app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]}, add_completion=False)
+app = typer.Typer(context_settings={"help_option_names": ["-h", "--help"]}, add_completion=False, pretty_exceptions_enable=False)
 
 def print_banner():
     banner = """
@@ -37,6 +37,8 @@ def policies(
     machine_hash: Annotated[str, typer.Option("--machine-hash", "-H", help="[Optional] The NT hash for the machine account")] = None,
     registration_sleep: Annotated[int, typer.Option("--registration-sleep", "-rs", help="[Optional] The amount of time, in seconds, that should be waited after registrating a new device. A few minutes is recommended so that the new device can be added to device collections (3 minutes by default, may need to be increased)")] = 180,
     use_existing_device: Annotated[str, typer.Option("--use-existing-device", "-d", help="[Optional] This option can be used to re-run SCCMSecrets.py using a previously registered device ; or to impersonate a legitimate SCCM client. In both cases, it expects the path of a folder containing a guid.txt file (the SCCM device GUID) and the key.pem file (the client's private key). Note that a client-name value must also be provided to SCCMSecrets (but does not have to match the one of the existing device)")] = None,
+    pki_cert: Annotated[str, typer.Option("--pki-cert", "-c", help="[Optional] The path to a valid domain PKI certificate in PEM format. Required when the Management Point enforces HTTPS and thus client certificate authentication")] = None,
+    pki_key: Annotated[str, typer.Option("--pki-key", "-k", help="[Optional] The path to the private key of the certificate in PEM format")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="[Optional] Enable verbose output")] = False
 ):
     print_banner()
@@ -44,7 +46,7 @@ def policies(
     else: logging.basicConfig(format='%(message)s', level=logging.INFO)
 
     # Arguments format and coherence checks
-    if not management_point.startswith('http://'):
+    if not management_point.startswith('http://') and not management_point.startswith('https://'):
         management_point = f'http://{management_point}'
     if management_point.endswith('/'):
         management_point = management_point[:-1]
@@ -54,6 +56,9 @@ def policies(
         return
     if machine_hash is not None and len(machine_hash) != 32:
         logger.error(f"{bcolors.FAIL}[!] The provided NT hash does not have the expected format (e.g. A4F49C406510BDCAB6824EE7C30FD852){bcolors.ENDC}")
+        return
+    if management_point.startswith('https://') and (pki_cert is None or pki_key is None):
+        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags{bcolors.ENDC}")
         return
     if machine_pass is None and machine_hash is not None:
         machine_pass = '0' * 32 + ':' + machine_hash
@@ -76,7 +81,7 @@ def policies(
     if machine_name is not None:
         lines.append(f" - Machine account provided: {machine_name}")
     else:
-        lines.append(f" - Machine account provided: none (anonymous registration)")
+        lines.append(f" - Machine account provided: none (anonymous registration or existing device)")
     lines.append(f" - Client name for the device: {client_name}")
     lines.append(f" - Registration sleep (in seconds): {registration_sleep}")
     lines.append(f" - Output directory: {bcolors.BOLD}./loot/{output_dir}{bcolors.ENDC}")
@@ -92,7 +97,9 @@ def policies(
         client_name,
         use_existing_device,
         machine_name,
-        machine_pass
+        machine_pass,
+        pki_cert,
+        pki_key
     )
 
     if use_existing_device is None:
@@ -107,7 +114,12 @@ def policies(
         try:
             policies_dumper.register_client()
         except Exception:
-            raise SCCMPoliciesDumpError("Error encountered during policies dump - could not register client")
+            err = "Error encountered during policies dump - could not register client"
+            if verbose is True:
+                raise SCCMPoliciesDumpError(err)
+            else:
+                logger.error(f"{bcolors.FAIL}[-] {err}{bcolors.ENDC}")
+                return
         logger.warning(f"[*] Sleeping for {registration_sleep} seconds")
         sleep(registration_sleep)
 
@@ -115,11 +127,21 @@ def policies(
     try:
         policies_dumper.request_policies()
     except:
-        raise SCCMPoliciesDumpError("Error encountered during policies dump - could not request policies for client")
+        err = "Error encountered during policies dump - could not request policies for client"
+        if verbose is True:
+            raise SCCMPoliciesDumpError(err)
+        else:
+            logger.error(f"{bcolors.FAIL}[-] {err}{bcolors.ENDC}")
+            return
     try:
         policies_dumper.parse_secret_policies()
     except:
-        raise SCCMPoliciesDumpError("Error encountered during policies dump - could not parse retrieved secret policies")
+        err = "Error encountered during policies dump - could not parse retrieved secret policies"
+        if verbose is True:
+            raise SCCMPoliciesDumpError(err)
+        else:
+            logger.error(f"{bcolors.FAIL}[-] {err}{bcolors.ENDC}")
+            return
     logger.warning("[+] All done. Bye!")
 
 
@@ -201,7 +223,12 @@ def files(
     try:
         file_dumper.dump_files()
     except:
-        raise SCCMDPFileDumpError("Error encountered during Distribution File dump")
+        err = "Error encountered during Distribution File dump"
+        if verbose is True:
+            raise SCCMDPFileDumpError(err)
+        else:
+            logger.error(f"{bcolors.FAIL}[-] {err}{bcolors.ENDC}")
+            return
     logger.warning("[+] All done. Bye!")
 
 
