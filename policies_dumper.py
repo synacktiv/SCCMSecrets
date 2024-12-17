@@ -74,7 +74,7 @@ class PoliciesDumper():
         if machine_name is not None and machine_pass is not None and use_existing_device is None:
             self.session.auth = HttpNtlmAuth(machine_name, machine_pass)
         if self.use_https:
-            logger.info("[*] HTTPS required. Using client certificate authentication")
+            logger.info("[INFO] HTTPS required. Using client certificate authentication")
             self.session.cert = (pki_cert, pki_key)
             self.session.verify = False
 

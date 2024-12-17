@@ -11,7 +11,7 @@ from bs4                        import BeautifulSoup
 from conf                       import bcolors, ANONYMOUSDP, DP_DOWNLOAD_HEADERS
 
 logger = logging.getLogger(__name__)
-
+requests.packages.urllib3.disable_warnings()
 
 class FileDumper():
 
@@ -22,7 +22,9 @@ class FileDumper():
                  urls,
                  recursion_depth,
                  username,
-                 password
+                 password,
+                 pki_cert,
+                 pki_key
                 ):
         self.distribution_point = distribution_point
         self.output_dir = output_dir
@@ -32,12 +34,19 @@ class FileDumper():
         self.recursion_depth = recursion_depth
         self.username = username
         self.password = password
+        self.pki_cert = pki_cert
+        self.pki_key = pki_key
+        self.use_https = True if self.distribution_point.startswith('https://') else False
         self.package_ids = set()
 
         self.session = requests.Session()
         self.session.headers.update(DP_DOWNLOAD_HEADERS)
         if username is not None and password is not None:
             self.session.auth = HttpNtlmAuth(username, password)
+        if self.use_https:
+            logger.info("[INFO] HTTPS required. Using client certificate authentication")
+            self.session.cert = (pki_cert, pki_key)
+            self.session.verify = False
 
 
     @staticmethod
@@ -87,16 +96,17 @@ class FileDumper():
         soup = BeautifulSoup(r.content, 'html.parser')
         files = []
         for href in soup.find_all('a'):
+            link_target = href.get('href').replace('http://', 'https://') if self.use_https is True else href.get('href')
             previous_sibling = href.find_previous_sibling(string=True)
             if previous_sibling and 'dir' in previous_sibling:
                 if depth <= self.recursion_depth:
-                    object[href.get('href')] = {}
-                    self.recursive_package_directory_fetch(object[href.get('href')], href.get('href'), depth)
+                    object[link_target] = {}
+                    self.recursive_package_directory_fetch(object[link_target], link_target, depth)
                 else:
                     logger.info("[INFO] Reached recursion depth limit")
-                    object[href.get('href')]  = "Not entering this subdirectory - recursion depth limit reached"
+                    object[link_target]  = "Not entering this subdirectory - recursion depth limit reached"
             else:
-                files.append(href.get('href'))
+                files.append(link_target)
         for file in files:
             object[file] = None
 
@@ -189,8 +199,8 @@ class FileDumper():
         else:
             result = self.check_credentials_before_download()
             if result is not True:
-                logger.warning(f"{bcolors.FAIL}[-] It seems like provided credentials do not allow to successfully authenticate to distribution point.{bcolors.ENDC}")
-                logger.warning(f"{bcolors.FAIL}Potential explanations: HTTPS enforced on distribution point ; wrong credentials ; NTLM disabled.{bcolors.ENDC}")
+                logger.warning(f"{bcolors.FAIL}[-] It seems like provided credentials do not allow to successfully authenticate to the distribution point.{bcolors.ENDC}")
+                logger.warning(f"{bcolors.FAIL}Potential explanations: HTTPS enforced on distribution point and invalid/no client certificate supplied; wrong credentials.{bcolors.ENDC}")
                 logger.warning(f"{bcolors.FAIL}Attempted username: '{self.username}' - attempted password/hash: '{self.password}{bcolors.ENDC}'")
                 return
             if self.urls is None:

