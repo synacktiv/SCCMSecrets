@@ -1,7 +1,8 @@
 from enum import Enum
 
 DP_DOWNLOAD_HEADERS = {
-    "User-Agent": "SMS CCM 5.0 TS"
+    "User-Agent": "SMS CCM 5.0 TS",
+    "Accept-Encoding": "identity"
 }
 MP_INTERACTIONS_HEADERS = {
     "User-Agent": "ConfigMgr Messaging HTTP Sender"
