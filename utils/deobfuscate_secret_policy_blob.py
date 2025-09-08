@@ -1,5 +1,7 @@
 # Taken from sccmwtf https://github.com/xpn/sccmwtf
 # Credits @xpn
+# Adaptation to support AES256 deobfuscation taken from @1058274 in their impacket PR (https://github.com/fortra/impacket/pull/2020)
+import logging
 
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.backends import default_backend
@@ -9,8 +11,9 @@ import warnings
 from cryptography.utils import CryptographyDeprecationWarning
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 
+logger = logging.getLogger(__name__)
+
 def mscrypt_derive_key_sha1(secret:bytes):
-    # Implementation of CryptDeriveKey(prov, CALG_3DES, hash, 0, &cryptKey);
     buf1 = bytearray([0x36] * 64)
     buf2 = bytearray([0x5C] * 64)
 
@@ -30,7 +33,7 @@ def mscrypt_derive_key_sha1(secret:bytes):
     digest2.update(buf2)
     hash2 = digest2.finalize()
 
-    derived_key = hash1 + hash2[:4]
+    derived_key = hash1 + hash2
     return derived_key
 
 def deobfuscate_secret_policy_blob(output):
@@ -41,12 +44,22 @@ def deobfuscate_secret_policy_blob(output):
     buffer = output[64:64+data_length]
 
     key = mscrypt_derive_key_sha1(output[4:4+0x28])
-    iv = bytes([0] * 8)
-    cipher = Cipher(algorithms.TripleDES(key), modes.CBC(iv), backend=default_backend())
+    blob_prefix = output[:2]
+    if blob_prefix == b'\x89\x13':
+        logger.info("[INFO] Policy obfuscated with triple DES")
+        block_cipher_algorithm = algorithms.TripleDES(key[:24])
+    elif blob_prefix == b'\x8a\x13':
+        logger.info("[INFO] Policy obfuscated with AES256")
+        block_cipher_algorithm = algorithms.AES256(key[:32])
+    else:
+        raise Exception("Unexpected starting bytes for obfuscated blob")
+
+    iv = bytes([0] * (block_cipher_algorithm.block_size // 8))
+    cipher = Cipher(block_cipher_algorithm, modes.CBC(iv), backend=default_backend())
     decryptor = cipher.decryptor()
     decrypted_data = decryptor.update(buffer) + decryptor.finalize()
 
-    padder = padding.PKCS7(64).unpadder() # 64 is the block size in bits for DES3
+    padder = padding.PKCS7(block_cipher_algorithm.block_size).unpadder()
     decrypted_data = padder.update(decrypted_data) + padder.finalize()
 
     try:

