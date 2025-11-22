@@ -51,6 +51,7 @@ class ANONYMOUSDP(Enum):
     ENABLED = 0
     DISABLED = 1
     UNKNOWN = 2
+    CLIENTCERT = 3
 
 class SCCMPoliciesDumpError(Exception):
     "Custom exception triggered when encountering an error during SCCM policies dump"
