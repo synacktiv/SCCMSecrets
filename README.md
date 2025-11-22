@@ -132,6 +132,11 @@ Retrieve secret policies when the Management Point enforces HTTPS
 $ python3 SCCMSecrets.py policies -mp https://mecm.sccm.lab -u 'azule$' -H '2B576ACBE6BCFDA7294D6BD18041B8FE' -cn 'test' --pki-cert ./cert.pem --pki-key ./key.pem
 ```
 
+Retrieve secret policies when the Management Point enforces HTTPS and without credentials ([mutual TLS bypass](https://www.synacktiv.com/sites/default/files/2025-08/def-con-33-mehdi-elyassa-sccm-the-tree-that-always-bears-bad-fruits.pdf#page=15)
+```
+$ python3 SCCMSecrets.py policies -mp https://mecm.sccm.lab -cn 'test' --mtls-bypass
+```
+
 
 ### Files
 
