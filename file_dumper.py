@@ -7,6 +7,7 @@ import requests
 import traceback
 
 from requests_ntlm              import HttpNtlmAuth
+from requests_kerberos          import HTTPKerberosAuth
 from bs4                        import BeautifulSoup
 from conf                       import bcolors, ANONYMOUSDP, DP_DOWNLOAD_HEADERS
 
@@ -25,7 +26,8 @@ class FileDumper():
                  password,
                  pki_cert,
                  pki_key,
-                 nocert
+                 nocert,
+                 kerberos
                 ):
         self.distribution_point = distribution_point
         self.output_dir = output_dir
@@ -43,7 +45,12 @@ class FileDumper():
 
         self.session = requests.Session()
         self.session.headers.update(DP_DOWNLOAD_HEADERS)
-        if username is not None and password is not None:
+        if kerberos:
+            if username:
+                principal, realm = username.split('@')
+                username = principal + '@' + realm.upper()
+            self.session.auth = HTTPKerberosAuth(force_preemptive=True, principal=username)
+        elif username is not None and password is not None and not kerberos:
             self.session.auth = HttpNtlmAuth(username, password)
         if self.use_https:
             if nocert:

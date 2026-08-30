@@ -3,5 +3,6 @@ typer[all]
 bs4
 cryptography
 requests_ntlm
+requests_kerberos
 requests_toolbelt
 pyasn1_modules

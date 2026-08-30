@@ -12,6 +12,7 @@ import xml.etree.ElementTree                as ET
 from cryptography.hazmat.primitives         import serialization
 from datetime                               import datetime
 from requests_ntlm                          import HttpNtlmAuth
+from requests_kerberos                      import HTTPKerberosAuth
 from requests_toolbelt.multipart            import decoder
 from utils.crypto                           import create_private_key, create_certificate, SCCM_sign, build_MS_public_key_blob
 from utils.request_templates                import *
@@ -34,7 +35,8 @@ class PoliciesDumper():
                  machine_pass,
                  pki_cert,
                  pki_key,
-                 altauth
+                 altauth,
+                 kerberos
                 ):
         self.management_point = management_point
         self.output_dir = output_dir
@@ -75,7 +77,12 @@ class PoliciesDumper():
         
         self.session = requests.Session()
         self.session.headers.update(MP_INTERACTIONS_HEADERS)
-        if machine_name is not None and machine_pass is not None and use_existing_device is None:
+        if kerberos:
+            if machine_name:
+                principal, realm = machine_name.split('@')
+                machine_name = principal + '@' + realm.upper()
+            self.session.auth = HTTPKerberosAuth(force_preemptive=True, principal=machine_name)
+        elif machine_name is not None and machine_pass is not None and use_existing_device is None:
             self.session.auth = HttpNtlmAuth(machine_name, machine_pass)
         if self.use_https:
             if altauth:
